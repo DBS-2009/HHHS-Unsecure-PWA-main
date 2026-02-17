@@ -9,11 +9,8 @@ app = Flask(__name__)
 # ---------------------------------------------------------
 # SESSION MANAGEMENT VULNERABILITY
 # ---------------------------------------------------------
-# Hardcoded secret key.
-# If an attacker obtains this key, they can forge session cookies.
-# Proper systems store this securely in environment variables. 
-# ----------------------------------------------------------
-app.secret_key = "insecure-secret-key"
+# Formerly Hardcoded secret key.
+# Secret key moved to an .env file which is inside of a .gitignore therefore technically doesn't exist 
 
 
 @app.route('/')
@@ -202,4 +199,4 @@ def transfer_money():
 
 
 if __name__ == '__main__':
-    serve(app, host="0.0.0.0", port=8000)
+    app.run(debug=True)
