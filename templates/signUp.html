@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='styles.css')}}">
+</head>
+<body>
+    <main>
+        <form method="post" action="/add_user">
+            <input type="text" name = "fname" placeholder="Enter First Name"><br>
+            <input type="text" name = "lname" placeholder="Enter Last Name"><br>
+            <input type="email" name = "email" placeholder="Enter Email"><br>
+            <input type="password" name = "password" placeholder="Enter password"><br>
+            <button type="submit" value = "signUp">create account</button>
+        </form>
+        <p> Already have an account<br><a href="/">login</a></p> 
+    </main>
+</body>
+</html>
