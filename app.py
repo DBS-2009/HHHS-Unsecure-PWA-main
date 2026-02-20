@@ -1,28 +1,48 @@
 from flask import Flask, render_template, request, redirect, session, send_file
+from flask_wtf import FlaskForm, CSRFProtect
+from wtforms import StringField, PasswordField, SubmitField
+from wtforms.validators import DataRequired, Email
+import bcrypt
 import sqlite3
 import os
 import time
 from waitress import serve
 
 app = Flask(__name__)
-
-# ---------------------------------------------------------
-# SESSION MANAGEMENT VULNERABILITY
-# ---------------------------------------------------------
-# Formerly Hardcoded secret key.
-# Secret key moved to an .env file which is inside of a .gitignore therefore technically doesn't exist 
+csrf = CSRFProtect(app)
 
 
-@app.route('/')
+# Secret key should be set securely in production
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_secret_key')
+
+# Flask-WTF Forms
+class LoginForm(FlaskForm):
+    email = StringField('Email', validators=[DataRequired(), Email()])
+    password = PasswordField('Password', validators=[DataRequired()])
+    submit = SubmitField('login')
+
+class SignUpForm(FlaskForm):
+    fname = StringField('First Name', validators=[DataRequired()])
+    lname = StringField('Last Name', validators=[DataRequired()])
+    email = StringField('Email', validators=[DataRequired(), Email()])
+    password = PasswordField('Password', validators=[DataRequired()])
+    submit = SubmitField('create account')
+
+
+@app.route('/', methods=['GET'])
 def login():
-    return render_template('login.html')
+    form = LoginForm()
+    return render_template('login.html', form=form)
 
 
 @app.route('/login_validation', methods=['POST'])
 def login_validation():
+    form = LoginForm()
+    if not form.validate_on_submit():
+        return redirect('/')
 
-    email = request.form.get('email')
-    password = request.form.get('password')
+    email = form.email.data
+    password = form.password.data
 
     connection = sqlite3.connect('LoginData.db')
     cursor = connection.cursor()
@@ -36,8 +56,16 @@ def login_validation():
     # password: anything
     # This would log them in without knowing credentials.
     # ---------------------------------------------------------
-    query = f"SELECT * FROM USERS WHERE email = '{email}' AND password = '{password}'"
-    user = cursor.execute(query).fetchall()
+    query = "SELECT * FROM USERS WHERE email = ?"
+    user = cursor.execute(query, (email,)).fetchall()
+
+    if user:
+        stored_hash = user[0][3]
+        if bcrypt.checkpw(password.encode('utf-8'), stored_hash.encode('utf-8')):
+            # Password matches
+            pass
+        else:
+            user = []
 
     # ---------------------------------------------------------
     # SIDE CHANNEL ATTACK (Timing Attack)
@@ -45,10 +73,7 @@ def login_validation():
     # This artificial delay creates measurable timing differences.
     # Attackers could measure response times to guess valid emails.
     # ---------------------------------------------------------
-    if len(user) > 0:
-        time.sleep(0.1)  # shorter delay
-    else:
-        time.sleep(1)  # longer delay reveals login failure timing
+    # Removed artificial timing differences to prevent timing attacks
 
     if len(user) > 0:
 
@@ -66,6 +91,7 @@ def login_validation():
         # Storing email directly in session without regeneration.
         # Session fixation possible.
         # ---------------------------------------------------------
+        session.clear()
         session['user'] = email
 
         return redirect(f'/home?fname={user[0][0]}&lname={user[0][1]}&email={user[0][2]}')
@@ -73,9 +99,10 @@ def login_validation():
         return redirect('/')
 
 
-@app.route('/signUp')
+@app.route('/signUp', methods=['GET'])
 def signUp():
-    return render_template('signUp.html')
+    form = SignUpForm()
+    return render_template('signUp.html', form=form)
 
 
 @app.route('/home')
@@ -89,6 +116,10 @@ def home():
     # http://site/home?fname=Admin&lname=User&email=admin@email.com
     # and appear logged in.
     # ---------------------------------------------------------
+
+
+    if 'user' not in session:
+        return redirect('/')
 
     fname = request.args.get('fname')
     lname = request.args.get('lname')
@@ -108,11 +139,16 @@ def home():
 
 @app.route('/add_user', methods=['POST'])
 def add_user():
+    form = SignUpForm()
+    if not form.validate_on_submit():
+        return render_template('signUp.html', form=form)
 
-    fname = request.form.get('fname')
-    lname = request.form.get('lname')
-    email = request.form.get('email')
-    password = request.form.get('password')
+    fname = form.fname.data
+    lname = form.lname.data
+    email = form.email.data
+    password = form.password.data
+    hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+    hashed_password = hashed.decode('utf-8')
 
     connection = sqlite3.connect('LoginData.db')
     cursor = connection.cursor()
@@ -126,7 +162,7 @@ def add_user():
     # This creates duplicate accounts.
     # Proper fix: UNIQUE constraint + transaction handling.
     # ---------------------------------------------------------
-    ans = cursor.execute(f"SELECT * FROM USERS WHERE email = '{email}'").fetchall()
+    ans = cursor.execute("SELECT * FROM USERS WHERE email = ?", (email,)).fetchall()
 
     if len(ans) > 0:
         connection.close()
@@ -141,8 +177,8 @@ def add_user():
         # fname = Robert'); DROP TABLE USERS;--
         # ---------------------------------------------------------
         cursor.execute(
-            f"INSERT INTO USERS(first_name,last_name,email,password) "
-            f"VALUES('{fname}','{lname}','{email}','{password}')"
+            "INSERT INTO USERS(first_name,last_name,email,password) VALUES (?, ?, ?, ?)",
+            (fname, lname, email, hashed_password)
         )
         connection.commit()
         connection.close()
@@ -161,8 +197,16 @@ def redirect_me():
     # /redirect_me?next=https://malicious-site.com
     # Victims trust the domain and get redirected to phishing site.
     # ---------------------------------------------------------
+    from urllib.parse import urlparse, urljoin
     next_url = request.args.get('next')
-    return redirect(next_url)
+    def is_safe_url(target):
+        ref_url = urlparse(request.host_url)
+        test_url = urlparse(urljoin(request.host_url, target))
+        return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
+
+    if next_url and is_safe_url(next_url):
+        return redirect(next_url)
+    return redirect('/')
 
 
 @app.route('/download')
@@ -176,8 +220,14 @@ def download():
     # /download?file=../../../../etc/passwd
     # and retrieve sensitive server files.
     # ---------------------------------------------------------
+    from werkzeug.utils import secure_filename
     filename = request.args.get('file')
-    return send_file(filename)
+    safe_dir = os.path.join(os.getcwd(), 'static')
+    safe_filename = secure_filename(filename)
+    file_path = os.path.join(safe_dir, safe_filename)
+    if not os.path.isfile(file_path):
+        return "File not found", 404
+    return send_file(file_path)
 
 
 @app.route('/transfer_money', methods=['POST'])

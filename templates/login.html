@@ -8,10 +8,11 @@
 </head>
 <body>
     <main>
-        <form method ="post" action="/login_validation">
-            <input type = "email" name = "email" placeholder = "Enter email"><br>
-            <input type = "password" name = "password" placeholder = "Enter password"><br>
-            <button type = "submit" value= "login">login</button>
+        <form method="post" action="/login_validation">
+            {{ form.hidden_tag() }}
+            {{ form.email(size=32, placeholder="Enter email") }}<br>
+            {{ form.password(size=32, placeholder="Enter password") }}<br>
+            {{ form.submit() }}
         </form>
         <p>Don't have an account <br><a href = '/signUp'> create an account</a> </p>
         <img class = "UnknownUser"> 

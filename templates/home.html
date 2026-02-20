@@ -8,8 +8,8 @@
 </head>
 <body>
     <main>
-        <h1> Welcome, {{ fname }} {{ lname }} </h1>
-        <h2> Email : {{ email }} </h2>
+        <h1> Welcome, {{ fname|e }} {{ lname|e }} </h1>
+        <h2> Email : {{ email|e }} </h2>
         <img class = "showUser">
     </main>
 </body>

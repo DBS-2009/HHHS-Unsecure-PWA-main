@@ -9,11 +9,12 @@
 <body>
     <main>
         <form method="post" action="/add_user">
-            <input type="text" name = "fname" placeholder="Enter First Name"><br>
-            <input type="text" name = "lname" placeholder="Enter Last Name"><br>
-            <input type="email" name = "email" placeholder="Enter Email"><br>
-            <input type="password" name = "password" placeholder="Enter password"><br>
-            <button type="submit" value = "signUp">create account</button>
+            {{ form.hidden_tag() }}
+            {{ form.fname(size=32, placeholder="Enter First Name") }}<br>
+            {{ form.lname(size=32, placeholder="Enter Last Name") }}<br>
+            {{ form.email(size=32, placeholder="Enter Email") }}<br>
+            {{ form.password(size=32, placeholder="Enter password") }}<br>
+            {{ form.submit() }}
         </form>
         <p> Already have an account<br><a href="/">login</a></p> 
     </main>
